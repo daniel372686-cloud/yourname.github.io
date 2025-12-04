@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Dodge Hell</title>
 <style>
     body {
         margin: 0;
-        overflow: hidden;
         background: #111;
         color: white;
         font-family: Arial, sans-serif;
@@ -15,13 +14,11 @@
     #gameCanvas {
         background: #222;
         display: block;
-        margin: auto;
-        margin-top: 20px;
+        margin: 20px auto;
         border: 2px solid white;
     }
     #scoreText {
         font-size: 24px;
-        margin-top: 10px;
     }
 </style>
 </head>
@@ -37,11 +34,11 @@ const ctx = canvas.getContext("2d");
 
 let player = { x: 180, y: 550, w: 40, h: 40, speed: 5 };
 let obstacles = [];
-let gameOver = false;
 let score = 0;
 let speedUp = 1;
+let gameOver = false;
 
-// 玩家控制（左＆右）
+// 玩家控制
 let leftPressed = false;
 let rightPressed = false;
 document.addEventListener("keydown", e => {
@@ -53,19 +50,9 @@ document.addEventListener("keyup", e => {
     if (e.key === "ArrowRight") rightPressed = false;
 });
 
-// 手機版觸控
-document.addEventListener("touchstart", e => {
-    let x = e.touches[0].clientX;
-    if (x < window.innerWidth / 2) leftPressed = true;
-    else rightPressed = true;
-});
-document.addEventListener("touchend", e => {
-    leftPressed = false;
-    rightPressed = false;
-});
-
-// 障礙物生成
+// 生成障礙物
 function spawnObstacle() {
+    if (gameOver) return;
     let size = Math.random() * 40 + 20;
     obstacles.push({
         x: Math.random() * (canvas.width - size),
@@ -74,21 +61,19 @@ function spawnObstacle() {
         h: size,
         speed: 3 + speedUp
     });
-    setTimeout(spawnObstacle, Math.random() * 600 + 300); // 0.3~0.9秒生成一次
+    setTimeout(spawnObstacle, Math.random() * 800 + 400); // 0.4~1.2秒生成一次
 }
 spawnObstacle();
 
-// 判斷碰撞
+// 碰撞判定
 function collide(a, b) {
-    return (
-        a.x < b.x + b.w &&
-        a.x + a.w > b.x &&
-        a.y < b.y + b.h &&
-        a.y + a.h > b.y
-    );
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
 }
 
-// 遊戲主循環
+// 遊戲循環
 function gameLoop() {
     if (gameOver) return;
 
@@ -108,23 +93,21 @@ function gameLoop() {
     obstacles.forEach(o => {
         o.y += o.speed;
         ctx.fillRect(o.x, o.y, o.w, o.h);
-
-        // 碰到玩家
         if (collide(player, o)) {
             gameOver = true;
-            alert("Game Over! 你的分數: " + score);
+            alert("Game Over! 你的分數: " + Math.floor(score));
             location.reload();
         }
     });
 
-    // 清除離開畫面的障礙物
+    // 移除掉出畫面的障礙物
     obstacles = obstacles.filter(o => o.y < canvas.height);
 
-    // 計分（每秒 +1）
+    // 計分
     score += 0.02;
     document.getElementById("scoreText").textContent = "Score: " + Math.floor(score);
 
-    // 隨時間加速
+    // 遊戲加速
     speedUp += 0.0005;
 
     requestAnimationFrame(gameLoop);
