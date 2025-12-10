@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Dodge Hell</title>
+    <title>Dodge Hell v2.0</title>
     <style>
         body {
             margin: 0;
@@ -12,10 +12,13 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            font-family: 'Arial', sans-serif;
         }
         canvas {
             background: #111;
             border: 3px solid #444;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            cursor: pointer; /* 讓滑鼠在 Canvas 上變成手指狀 */
         }
     </style>
 </head>
@@ -26,101 +29,273 @@
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
 
-        // 玩家（用 emoji）
+        // --- 遊戲狀態管理 ---
+        const STATE = {
+            MENU: 0,
+            PLAYING: 1,
+            GAMEOVER: 2
+        };
+        let currentState = STATE.MENU;
+        let difficulty = 'easy'; // 'easy' or 'hard'
+
+        // --- 玩家設定 ---
         const player = {
             x: 200,
             y: 500,
             size: 40,
-            speed: 6
+            speed: 6,
+            maxHp: 3,
+            hp: 3,
+            invincible: false,      // 是否處於無敵狀態
+            invincibleTime: 1000,   // 無敵時間 (毫秒)
+            lastHitTime: 0,         // 上次受傷時間
+            blink: true             // 用於無敵時的閃爍效果
         };
 
-        // 玩家控制
+        // --- 控制變數 ---
         let left = false, right = false;
+        
+        // --- 遊戲變數 ---
+        let obstacles = [];
+        let score = 0;
+        let spawnTimer = null; // 障礙物生成計時器
+
+        // --- 圖片載入 (如果你有圖片，請解開註解) ---
+        // const obstacleImg = new Image();
+        // obstacleImg.src = "obstacle.png";
+
+        // --- 事件監聽 ---
         document.addEventListener("keydown", e => {
             if (e.key === "ArrowLeft") left = true;
             if (e.key === "ArrowRight") right = true;
+            
+            // 遊戲結束時按空白鍵重新開始
+            if (currentState === STATE.GAMEOVER && e.code === "Space") {
+                resetGameToMenu();
+            }
         });
+        
         document.addEventListener("keyup", e => {
             if (e.key === "ArrowLeft") left = false;
             if (e.key === "ArrowRight") right = false;
         });
 
-        // 障礙物圖片
-        const obstacleImg = new Image();
-        obstacleImg.src = "obstacle.png";
+        // 處理滑鼠點擊選單
+        canvas.addEventListener("mousedown", (e) => {
+            if (currentState === STATE.MENU) {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
 
-        let obstacles = [];
-        let gameOver = false;
-        let score = 0;
+                // 簡單模式按鈕區域 (大約位置)
+                if (clickX > 100 && clickX < 300 && clickY > 250 && clickY < 310) {
+                    startGame('easy');
+                }
+                // 困難模式按鈕區域
+                if (clickX > 100 && clickX < 300 && clickY > 330 && clickY < 390) {
+                    startGame('hard');
+                }
+            } else if (currentState === STATE.GAMEOVER) {
+                resetGameToMenu();
+            }
+        });
+
+        // --- 核心功能 ---
 
         function spawnObstacle() {
-            const w = 60, h = 60;
+            if (currentState !== STATE.PLAYING) return;
+
+            const w = 50, h = 50;
             const x = Math.random() * (canvas.width - w);
+            
+            // 困難模式下，障礙物會有水平速度 (vx)
+            let vx = 0;
+            if (difficulty === 'hard') {
+                // 隨機給予 -3 到 3 之間的水平速度，且避免接近 0
+                vx = (Math.random() - 0.5) * 6;
+                if (Math.abs(vx) < 1) vx = 2; 
+            }
+
             obstacles.push({
                 x,
                 y: -100,
                 w,
                 h,
-                speed: 3 + Math.random() * 4
+                speed: 3 + Math.random() * 4 + (score * 0.01), // 隨分數增加速度
+                vx: vx // 水平速度
             });
         }
 
-        setInterval(spawnObstacle, 900);
+        function startGame(selectedDifficulty) {
+            difficulty = selectedDifficulty;
+            currentState = STATE.PLAYING;
+            score = 0;
+            obstacles = [];
+            player.hp = player.maxHp;
+            player.x = canvas.width / 2;
+            player.invincible = false;
+            
+            // 根據難度調整生成頻率
+            let spawnRate = difficulty === 'hard' ? 700 : 900;
+            if (spawnTimer) clearInterval(spawnTimer);
+            spawnTimer = setInterval(spawnObstacle, spawnRate);
+        }
 
-        function drawPlayer() {
-            ctx.font = player.size + "px Arial";
+        function resetGameToMenu() {
+            currentState = STATE.MENU;
+            if (spawnTimer) clearInterval(spawnTimer);
+        }
+
+        function drawMenu() {
+            ctx.fillStyle = "white";
             ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("👾", player.x, player.y);
+            
+            // 標題
+            ctx.font = "bold 50px Arial";
+            ctx.fillText("DODGE HELL", canvas.width / 2, 150);
+            
+            // 按鈕樣式
+            ctx.font = "30px Arial";
+            
+            // 簡單按鈕
+            ctx.fillStyle = "#4CAF50"; // 綠色
+            ctx.fillRect(100, 250, 200, 60);
+            ctx.fillStyle = "white";
+            ctx.fillText("簡單模式", canvas.width / 2, 290);
+
+            // 困難按鈕
+            ctx.fillStyle = "#F44336"; // 紅色
+            ctx.fillRect(100, 330, 200, 60);
+            ctx.fillStyle = "white";
+            ctx.fillText("困難模式", canvas.width / 2, 370);
+
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "#aaa";
+            ctx.fillText("請點擊選項開始", canvas.width / 2, 500);
+        }
+
+        function drawUI() {
+            // 分數
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "left";
+            ctx.fillText("Score: " + score, 20, 30);
+
+            // 血量 (畫愛心)
+            let hearts = "";
+            for(let i=0; i<player.hp; i++) {
+                hearts += "❤️";
+            }
+            ctx.textAlign = "right";
+            ctx.fillText(hearts, canvas.width - 20, 30);
         }
 
         function update() {
+            // 無敵時間閃爍邏輯
+            if (player.invincible) {
+                if (Date.now() - player.lastHitTime > player.invincibleTime) {
+                    player.invincible = false;
+                    player.blink = true;
+                } else {
+                    // 每 100ms 切換一次顯示狀態
+                    player.blink = Math.floor(Date.now() / 100) % 2 === 0;
+                }
+            } else {
+                player.blink = true;
+            }
+
+            // 玩家移動
             if (left) player.x -= player.speed;
             if (right) player.x += player.speed;
             player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
 
+            // 更新障礙物
             obstacles.forEach(o => {
                 o.y += o.speed;
+                o.x += o.vx; // 加上水平移動
+
+                // 困難模式：碰到牆壁反彈
+                if (difficulty === 'hard') {
+                    if (o.x <= 0 || o.x + o.w >= canvas.width) {
+                        o.vx *= -1;
+                    }
+                }
 
                 // 碰撞判定
-                if (
-                    o.x < player.x + 20 &&
-                    o.x + o.w > player.x - 20 &&
-                    o.y < player.y + 20 &&
-                    o.y + o.h > player.y - 20
+                // 只有當玩家不是無敵狀態時才判定傷害
+                if (!player.invincible &&
+                    o.x < player.x + 15 &&
+                    o.x + o.w > player.x - 15 &&
+                    o.y < player.y + 15 &&
+                    o.y + o.h > player.y - 15
                 ) {
-                    gameOver = true;
+                    player.hp--;
+                    player.invincible = true;
+                    player.lastHitTime = Date.now();
+
+                    if (player.hp <= 0) {
+                        currentState = STATE.GAMEOVER;
+                        if (spawnTimer) clearInterval(spawnTimer);
+                    }
                 }
             });
 
+            // 移除超出畫面的障礙物
+            // 注意：因為有左右移動，我們只檢查 Y 軸是否超出底部
             obstacles = obstacles.filter(o => o.y < canvas.height + 100);
-            score++;
+            
+            if(currentState === STATE.PLAYING) score++;
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 玩家
-            drawPlayer();
-
-            // 障礙物
-            obstacles.forEach(o => {
-                ctx.drawImage(obstacleImg, o.x, o.y, o.w, o.h);
-            });
-
-            // 分數
-            ctx.fillStyle = "white";
-            ctx.font = "20px Arial";
-            ctx.fillText("Score: " + score, 70, 30);
-
-            if (gameOver) {
-                ctx.fillStyle = "red";
-                ctx.font = "40px Arial";
-                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+            if (currentState === STATE.MENU) {
+                drawMenu();
+                requestAnimationFrame(draw);
                 return;
             }
 
-            update();
+            // 繪製玩家 (如果是無敵且 blink 為 false，就不畫，製造閃爍感)
+            if (player.blink) {
+                ctx.font = player.size + "px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("👾", player.x, player.y);
+            }
+
+            // 繪製障礙物
+            obstacles.forEach(o => {
+                // 如果你想用圖片，請把下面三行註解掉，並解開 ctx.drawImage
+                ctx.font = "40px Arial";
+                ctx.textAlign = "left";
+                ctx.fillText("🔥", o.x, o.y + 40); 
+                
+                // ctx.drawImage(obstacleImg, o.x, o.y, o.w, o.h);
+            });
+
+            drawUI();
+
+            if (currentState === STATE.GAMEOVER) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = "red";
+                ctx.font = "bold 50px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+                
+                ctx.fillStyle = "white";
+                ctx.font = "30px Arial";
+                ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 50);
+                
+                ctx.font = "20px Arial";
+                ctx.fillStyle = "#aaa";
+                ctx.fillText("點擊畫面或按空白鍵返回選單", canvas.width / 2, canvas.height / 2 + 100);
+            } else {
+                update();
+            }
+
             requestAnimationFrame(draw);
         }
 
